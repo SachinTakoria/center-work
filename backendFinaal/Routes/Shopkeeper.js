@@ -4,28 +4,30 @@ const {
   otpToEmailForVerification,
 } = require("../Services/emailService/emailservice");
 const { User, Shopkeeper } = require("../Model/Customer");
-const Product=require("../Model/Product")
+const Product = require("../Model/Product");
+const checkuserdetails = require("../Middlewares/CheckUserDetails");
+const HandleResponse = require("../HandleResponse/HandleResponse");
+const jwt = require("jsonwebtoken");
 
 const router = express.Router();
 
 router.get("/HealthCheckApi", async (req, res) => {
-  return res.status(200).json({ message: "server health is okay" });
+  HandleResponse(res, 200, "server Health is ok");
 });
 
 router.post("/verifyShopkeeper", async (req, res) => {
   try {
     const { name, phone, email, password, address, city, state } = req.body;
     if (!name || !phone || !email || !password || !address || !city || !state)
-      return res.status(404).json({ message: "field is empty" });
+      return HandleResponse(res, 404, "Field is empty ");
 
     const existinguser = await User.findOne({ email });
-    if (existinguser)
-      return res.status(400).json({ message: "Account already exist" });
+    if (existinguser) return HandleResponse(res, 400, "Account already exist");
 
     const otp = generateOtp(email);
     return await otpToEmailForVerification(res, email, otp);
   } catch (error) {
-    return res.status(500).json({ message: "internal server error", error });
+    return HandleResponse(res, 500, "Internal server error", error);
   }
 });
 
@@ -35,18 +37,16 @@ router.post("/createShopkeeper", async (req, res) => {
       req.body;
 
     if (!name || !phone || !email || !address || !password || !city || !state)
-      return res.status(404).send({ message: "Field is empty" });
+      return HandleResponse(res, 404, "field is empty");
 
-    if (!otp) return res.status(404).send({ message: "Enter the otp" });
+    if (!otp) return HandleResponse(res, 404, "pls enter the otp");
 
     const existinguser = await User.findOne({ email });
-    if (existinguser)
-      return res.status(400).json({ message: "Account already exists" });
+    if (existinguser) return HandleResponse(res, 400, "Account already exist");
 
-    const resonse = verifyotp(email, otp);
+    const response = verifyotp(email, otp);
 
-    if (!resonse.status)
-      return res.status(404).json({ message: resonse.message });
+    if (!response.status) return HandleResponse(res, 404, response.message);
 
     const result = await Shopkeeper.create({
       name,
@@ -58,74 +58,66 @@ router.post("/createShopkeeper", async (req, res) => {
       state,
     });
 
-    return res
-      .status(201)
-      .json({ message: "Account created successfully", result });
+    return HandleResponse(res, 201, "Account created successfully", result);
   } catch (error) {
-    return res.status(500).json({
-      message: "Internal Server error",
-      error: error.message || "Unknown error occurred",
-    });
+    return HandleResponse(resp, 500, "Internal Server error", null, error);
   }
 });
 
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password)
-      return res.status(404).json({ message: "Field is Empty" });
-
+    if (!email || !password) return HandleResponse(res, 404, "Field is empty");
     const result = await User.findOne({ email });
-    if (!result) return res.status(401).json({ message: "Invalid Email" });
+    if (!result) return HandleResponse(res, 404, "Invalid Email");
 
     if (password === result.password) {
       if (!result.service)
-        return res.status(401).json({ message: "Your service is disabled" });
-      return res
-        .status(202)
-        .json({ message: "Login successfully", data: result._id });
+        return HandleResponse(res, 401, "Your service is disabled");
+
+      const payload = { id: result._id };
+      const token = jwt.sign(payload, process.env.JSON_SECRET_KEY);
+      return HandleResponse(res, 202, "login successfully", token);
     }
-    return res.status(401).json({ message: "Invalid Password" });
+    return HandleResponse(res, 404, "Invalid Password");
   } catch (error) {
-    return res.status(500).json({ message: "Internal Server error", error });
+    return HandleResponse(res, 500, "Internal Server error", null, error);
   }
 });
 
 router.post("/enable", async (req, res) => {
   try {
     const { id } = req.body;
-    if (!id) return res.status(404).json({ message: "Plz Select the user" });
+    if (!id) return HandleResponse(res, 404, "Plz Select the user");
 
     const existinguser = await User.findOne({ _id: id });
-    if (!existinguser)
-      return res.status(404).json({ message: "User is not found" });
+    if (!existinguser) return HandleResponse(res, 404, "User is not found");
 
     const result = await User.updateOne(
       { _id: id },
       { $set: { service: true } }
     );
-    return res.status(202).json({ message: "Service is enabled", result });
+    return HandleResponse(res, 202, "Service is enabled", result);
   } catch (error) {
-    return res.status(500).json({ message: "Internal Server error", error });
+    return HandleResponse(res, 500, "Internal Server error", null, error);
   }
 });
 
 router.post("/disable", async (req, res) => {
   try {
     const { id } = req.body;
-    if (!id) return res.status(404).json({ message: "Plz Select the user" });
+    if (!id) return HandleResponse(res, 404, "Plz Select the user");
 
     const existinguser = await User.findOne({ _id: id });
-    if (!existinguser)
-      return res.status(404).json({ message: "User is not found" });
+    if (!existinguser) return HandleResponse(res, 404, "User is not found");
 
     const result = await User.updateOne(
       { _id: id },
       { $set: { service: false } }
     );
-    return res.status(202).json({ message: "Service is disabled", result });
+    return HandleResponse(res, 202, "Service is disabled", result);
   } catch (error) {
-    return res.status(500).json({ message: "Internal Server error", error });
+    return HandleResponse(res, 500, "Internal Server error", null, error);
   }
 });
 
@@ -155,13 +147,10 @@ router.post("/addproduct", async (req, res) => {
       !tax ||
       !userid
     )
-      return res.status(404).json({ message: "Field is Empty" });
-
+      return HandleResponse(res, 404, "Field is Empty");
     const existingproduct = await Product.findOne({ model });
     if (existingproduct)
-      return res
-        .status(400)
-        .json({ message: "Product of this model already exists" });
+      return HandleResponse(res, 400, "Product of this model already exists");
 
     const newproduct = await Product.create({
       userid,
@@ -175,55 +164,123 @@ router.post("/addproduct", async (req, res) => {
       tax,
       stock,
     });
-    return res
-      .status(201)
-      .json({ message: "Product added successfully", newproduct });
+    return HandleResponse(res, 201, "Product added successfully", newproduct);
   } catch (error) {
-    return res.status(500).json({ message: "Internal Server error", error });
+    return HandleResponse(res, 500, "Internal Server error", null, error);
   }
 });
 
-router.get("/getProducts",async(req,res)=>{
+router.get("/getProducts", async (req, res) => {
   try {
-    
-  const allProducts= await Product.find({userid:"67911b387dd3934777f1a70b"})
-  if(allProducts===0)
-    return res.status(404).json({message:"Your product list is empty"})
+    const allProducts = await Product.find({
+      userid: "67911b387dd3934777f1a70b",
+    });
+    if (allProducts === 0)
+      return HandleResponse(res, 404, "Your product list is empty");
 
-  return res.status(202).json({message:"All products fetched successfully",allProducts})
-    
+    return HandleResponse(
+      res,
+      202,
+      "All products fetched successfully",
+      allProducts
+    );
   } catch (error) {
-    return res.status(500).json({message:"internal server error",error})
-    
+    return HandleResponse(res, 500, "Internal server error", null, error);
   }
-})
+});
 
-router.put("/updateProduct/:id",async(req,res)=>{
+router.put("/updateProduct/:id", async (req, res) => {
   try {
-    const{name,company,model,stock,description,price,discount,rate,tax}=req.body
-    if(!name||!company||!model||!description||!price||!discount||!rate||!tax)
-      return res.status(404).json({message:"field is empty"})
-    const {id}=req.params
-    if(!id)
-      return res.status(404).json({message:"pls select the product"})
+    const {
+      name,
+      company,
+      model,
+      stock,
+      description,
+      price,
+      discount,
+      rate,
+      tax,
+    } = req.body;
+    if (
+      !name ||
+      !company ||
+      !model ||
+      !description ||
+      !price ||
+      !discount ||
+      !rate ||
+      !tax
+    )
+      return HandleResponse(res, 404, "Field is Empty");
 
-  const existingproduct= await Product.findOne({_id:id})
-  if(!existingproduct)
-    return res.status(404).json({message:"this product is not found in your product list"})
+    const { id } = req.params;
+    if (!id) return HandleResponse(res, 404, "Plz select the product");
 
- const response= await Product.findOne({model})
- if(response)
-  return res.status(400).json({message:"product of this model already exist in your product list"})
+    const existingproduct = await Product.findOne({ _id: id });
+    if (!existingproduct)
+      return HandleResponse(
+        res,
+        404,
+        "This product is not found in your product list"
+      );
 
- const updateProduct= await Product.updateOne({_id:id},{$set:{name,company,model,description,price,discount,rate,tax,stock}})
- return res.status(202).json({message:"product updated successfully",updateProduct})
-} catch (error) {
-  return res.status(500).json({message:"internal server errror",error})
-    
+    const response = await Product.findOne({ model });
+    if (response)
+      return HandleResponse(
+        res,
+        400,
+        "Product of this model is already exists in your product list"
+      );
+
+    const updateProduct = await Product.updateOne(
+      { _id: id },
+      {
+        $set: {
+          name,
+          company,
+          model,
+          description,
+          price,
+          discount,
+          rate,
+          tax,
+          stock,
+        },
+      }
+    );
+    return HandleResponse(
+      res,
+      202,
+      "Product updated successfully",
+      updatedProduct
+    );
+  } catch (error) {
+    return HandleResponse(res, 500, "Internal server error", null, error);
   }
-})
+});
 
+router.delete("/deleteproduct/:id", checkuserdetails, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) return HandleResponse(res, 404, "Plz select the product");
 
+    const existingproduct = await Product.findOne({
+      _id: id,
+      userid: req.user._id,
+    });
+    if (!existingproduct)
+      return HandleResponse(
+        res,
+        404,
+        "This product is not found in your product list."
+      );
 
+    const result = await Product.deleteOne({ _id: id, userid: req.user._id });
+    return HandleResponse(res, 202, "Product deleted successfully", result);
+  } catch (error) {
+    return HandleResponse(res, 500, "Internal Server error", null, error);
+  }
+});
 
 module.exports = router;
