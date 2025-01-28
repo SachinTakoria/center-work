@@ -67,23 +67,57 @@ router.post("/createShopkeeper", async (req, res) => {
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) return HandleResponse(res, 404, "Field is empty");
+
+    // Log incoming request for debugging
+    console.log("Request Body: ", req.body);
+
+    if (!email || !password) {
+      console.log("Missing email or password");
+      return HandleResponse(res, 404, "Field is empty");
+    }
+
     const result = await User.findOne({ email });
-    if (!result) return HandleResponse(res, 404, "Invalid Email");
+
+    console.log("User Found: ", result);
+
+    if (!result) {
+      console.log("Invalid Email");
+      return HandleResponse(res, 404, "Invalid Email");
+    }
 
     if (password === result.password) {
-      if (!result.service)
+      console.log("Password Matched");
+
+      if (!result.service) {
+        console.log("Service Disabled");
         return HandleResponse(res, 401, "Your service is disabled");
+      }
 
       const payload = { id: result._id };
+
+      // Verify the environment variable is loaded
+      if (!process.env.JSON_SECRET_KEY) {
+        throw new Error("JSON_SECRET_KEY is not defined in environment");
+      }
+
       const token = jwt.sign(payload, process.env.JSON_SECRET_KEY);
-      return HandleResponse(res, 202, "login successfully", token);
+
+      console.log("Token Generated: ", token);
+
+      return HandleResponse(res, 202, "Login successfully", { token });
     }
+
+    console.log("Invalid Password");
     return HandleResponse(res, 404, "Invalid Password");
   } catch (error) {
-    return HandleResponse(res, 500, "Internal Server error", null, error);
+    console.error("Error in /login route: ", error); // Log the actual error
+    return HandleResponse(res, 500, "Internal Server error", null, {
+      message: error.message,
+      stack: error.stack,
+    });
   }
 });
+
 
 router.post("/enable", async (req, res) => {
   try {
@@ -120,6 +154,11 @@ router.post("/disable", async (req, res) => {
     return HandleResponse(res, 500, "Internal Server error", null, error);
   }
 });
+router.post("/fetchuserdetails",checkuserdetails,async(req,res)=>{
+  const payload={id:req.user._id}
+  const token=jwt.sign(payload,process.env.JSON_SECRET_KEY)
+  return HandleResponse(res,202,"Login Successfully",{role:req.user.role,token})
+})
 
 router.post("/addproduct", async (req, res) => {
   try {
@@ -253,7 +292,7 @@ router.put("/updateProduct/:id", async (req, res) => {
       res,
       202,
       "Product updated successfully",
-      updatedProduct
+      updateProduct
     );
   } catch (error) {
     return HandleResponse(res, 500, "Internal server error", null, error);
